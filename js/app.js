@@ -824,132 +824,84 @@ if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', closeCreateRoomMo
 
 // Update initializeGameRoom function to handle player synchronization
 async function initializeGameRoom() {
+    console.log('Starting game room initialization...');
+    
+    // Get room ID from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomId = urlParams.get('room');
+    
+    if (!roomId) {
+        console.error('No room ID provided');
+        window.location.href = '/';
+        return;
+    }
+    
     try {
-        console.log('Starting game room initialization...');
-
-        const params = new URLSearchParams(window.location.search);
-        const gameType = params.get('game');
-        const roomId = params.get('room');
-
-        if (!gameType || !roomId) {
-            throw new Error('Invalid game parameters');
-        }
-
-        // Initialize wallets first
+        // Initialize wallet state
+        console.log('Initializing wallet state...');
         await WalletState.initialize();
-
-        // Get room data from Firebase
+        
+        // Get room data
         console.log('Getting room data for:', roomId);
-        const roomsRef = await firebaseManager.getRoomsRef();
-        let room = await firebaseManager.getRoom(roomId);
+        const room = await firebaseManager.getRoom(roomId);
         
         if (!room) {
-            throw new Error('Room not found or has expired');
+            console.error('Room not found');
+            window.location.href = '/';
+            return;
         }
-
+        
         console.log('Room found:', room);
-
-        // Add the room ID to the room object
-        room.id = roomId;
-
-        // Verify game container exists
-        const gameContainer = document.getElementById('game-container');
-        if (!gameContainer) {
-            throw new Error('Game container element not found');
-        }
-
-        // Clear any existing content
-        gameContainer.innerHTML = '';
         
-        // Initialize the game based on type
-        console.log('Initializing game type:', gameType);
-        let game;
+        // Initialize game type
+        console.log('Initializing game type:', room.gameType);
+        const game = initializeGameType(room.gameType, room);
         
-        switch (gameType) {
-            case 'tictactoe':
-                // Ensure TicTacToe class is loaded
-                if (typeof TicTacToe === 'undefined') {
-                    console.log('Loading TicTacToe game script...');
-                    await loadGameScript('js/games/tictactoe.js');
-                }
-
-                if (typeof TicTacToe === 'undefined') {
-                    throw new Error('Failed to load TicTacToe game script');
-                }
-
-                console.log('Creating TicTacToe game instance with:', {
-                    creator: room.creator,
-                    challenger: room.challenger,
-                    currentWallet: WalletState.publicKey
-                });
-                
-                game = new TicTacToe(
-                    'game-container', 
-                    room.creator, 
-                    room.challenger || null,
-                    room.wagerAmount,
-                    room.turnTimer,
-                    room.totalRounds
-                );
-                
-                // Store game instance
-                window.currentGame = game;
-                
-                // Set up real-time updates for the room
-                console.log('Setting up real-time room updates');
-                roomsRef.child(roomId).on('value', (snapshot) => {
-                    const updatedRoom = snapshot.val();
-                    if (!updatedRoom) {
-                        console.log('Room no longer exists');
-                        return;
-                    }
-                    
-                    console.log('Room updated:', updatedRoom);
-                    
-                    // Update the game with new room data
-                    if (updatedRoom.challenger && !room.challenger) {
-                        console.log('Challenger joined:', updatedRoom.challenger);
-                        room = updatedRoom; // Update local room data
-                        room.id = roomId;
-                        game.setChallenger(updatedRoom.challenger);
-                        
-                        // Update the controls if needed
-                        updateGameControls(game, updatedRoom);
-                    }
-                    
-                    // Update game state if it exists
-                    if (updatedRoom.gameState) {
-                        console.log('Syncing game state:', updatedRoom.gameState);
-                        
-                        // If we have moves to sync
-                        if (updatedRoom.gameState.moves && Array.isArray(updatedRoom.gameState.moves)) {
-                            game.syncMoves(updatedRoom.gameState.moves);
-                            
-                            // Update scores
-                            if (updatedRoom.gameState.scores) {
-                                game.scores = updatedRoom.gameState.scores;
-                            }
-                            
-                            // Update current round
-                            if (updatedRoom.gameState.currentRound) {
-                                game.currentRound = updatedRoom.gameState.currentRound;
-                            }
-                        }
-                    }
-                });
-                
-                // Add game controls based on state
-                updateGameControls(game, room);
-                console.log('Game initialization complete');
-                break;
-                
-            default:
-                throw new Error(`Unsupported game type: ${gameType}`);
+        if (!game) {
+            console.error('Failed to initialize game');
+            return;
         }
+        
+        // Initialize the game with the creator's address
+        const currentWallet = WalletState.publicKey;
+        const isCreator = currentWallet === room.creator;
+        
+        console.log('Initializing game with:', {
+            creator: room.creator,
+            challenger: room.challenger,
+            currentWallet,
+            isCreator
+        });
+        
+        // Initialize the game with both creator and challenger (if exists)
+        await game.initialize(room.creator, room.challenger);
+        
+        // Update game controls based on player role
+        updateGameControls(game, room);
+        
+        // Set up real-time updates
+        setupRealtimeUpdates(game, room);
+        
     } catch (error) {
         console.error('Error initializing game room:', error);
-        alert(error.message || 'Failed to initialize game room');
-        window.location.href = 'index.html';
+        showError('Failed to initialize game room. Please try again.');
+    }
+}
+
+function initializeGameType(gameType, room) {
+    console.log('Initializing game type:', gameType);
+    
+    switch (gameType) {
+        case 'tictactoe':
+            return new TicTacToe(
+                room.id,
+                room.wagerAmount,
+                room.totalRounds || 3
+            );
+        // Add other game types here
+        default:
+            console.error('Unknown game type:', gameType);
+            return null;
     }
 }
 
@@ -1833,4 +1785,68 @@ function hidePaymentProcessingModal() {
     if (modal) {
         modal.classList.add('hidden');
     }
+}
+
+function setupRealtimeUpdates(game, room) {
+    console.log('Setting up real-time updates for room:', room.id);
+    
+    // Get reference to the room in Firebase
+    const roomRef = firebase.database().ref(`rooms/${room.id}`);
+    
+    // Listen for room updates
+    roomRef.on('value', (snapshot) => {
+        const updatedRoom = snapshot.val();
+        if (!updatedRoom) {
+            console.log('Room no longer exists');
+            return;
+        }
+        
+        console.log('Room updated:', updatedRoom);
+        
+        // Handle challenger joining
+        if (updatedRoom.challenger && !room.challenger) {
+            console.log('Challenger joined:', updatedRoom.challenger);
+            room.challenger = updatedRoom.challenger;
+            game.initialize(room.creator, updatedRoom.challenger);
+        }
+        
+        // Handle game state updates
+        if (updatedRoom.gameState) {
+            console.log('Updating game state:', updatedRoom.gameState);
+            
+            // Update board state
+            if (updatedRoom.gameState.board) {
+                game.board = updatedRoom.gameState.board;
+                game.createGameHTML(); // Refresh the game board
+            }
+            
+            // Update current player
+            if (updatedRoom.gameState.currentPlayer) {
+                game.currentPlayer = updatedRoom.gameState.currentPlayer;
+                game.updateTurnStatus();
+            }
+            
+            // Update scores
+            if (updatedRoom.gameState.scores) {
+                game.wins = updatedRoom.gameState.scores.creator || 0;
+                game.losses = updatedRoom.gameState.scores.challenger || 0;
+                game.createGameHTML(); // Refresh the display
+            }
+            
+            // Update round information
+            if (updatedRoom.gameState.currentRound) {
+                game.currentRound = updatedRoom.gameState.currentRound;
+                game.createGameHTML();
+            }
+        }
+        
+        // Update game controls if needed
+        updateGameControls(game, updatedRoom);
+    });
+    
+    // Handle errors
+    roomRef.on('error', (error) => {
+        console.error('Error in real-time updates:', error);
+        showError('Lost connection to the game. Please refresh the page.');
+    });
 }

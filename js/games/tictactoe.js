@@ -481,25 +481,31 @@ class TicTacToe {
             document.head.appendChild(styleEl);
         }
         
+        this.container = document.getElementById('game-container');
+        
         this.init();
     }
 
-    async initialize(creator) {
-        this.creator = creator;
-        this.currentPlayer = creator; // Set creator as first player
-        this.gameStarted = false;
-        this.isGameActive = false;
-        await this.saveGameState();
-    }
-
-    async joinGame(challenger) {
-        if (this.challenger || this.creator === challenger) {
+    async initialize(creator, challenger = null) {
+        console.log('Initializing game with:', { creator, challenger });
+        
+        if (!this.container) {
+            console.error('Game container not found');
             return false;
         }
+
+        this.creator = creator;
         this.challenger = challenger;
-        this.gameStarted = true;
-        this.isGameActive = true;
-        await this.saveGameState();
+        this.currentPlayer = creator; // Creator always starts first
+        
+        // Initialize the game state
+        this.gameStarted = challenger !== null;
+        this.isGameActive = challenger !== null;
+        
+        // Create initial game HTML
+        this.createGameHTML();
+        this.setupEventListeners();
+        
         return true;
     }
 
@@ -524,19 +530,28 @@ class TicTacToe {
     }
 
     createGameHTML() {
+        if (!this.container) {
+            console.error('Cannot create game HTML: container not found');
+            return;
+        }
+
         const challengerDisplay = this.challenger ? 
             `${this.challenger.slice(0, 4)}...${this.challenger.slice(-4)}` : 
             'Waiting for player...';
 
         // Determine if we should show cancel button (only for creator before challenger joins)
-        const showCancelButton = !this.challenger && this.currentPlayer === this.creator && !this.gameOver;
+        const showCancelButton = !this.challenger && this.creator && this.currentPlayer === this.creator && !this.gameOver;
+
+        const creatorDisplay = this.creator ? 
+            `${this.creator.slice(0, 4)}...${this.creator.slice(-4)}` : 
+            'Loading...';
 
         this.container.innerHTML = `
             <div class="game-container">
                 <div class="game-header">
                     <div class="player-info">
                         <div class="player player1 ${this.currentPlayer === this.creator ? 'active' : ''}">
-                            <span class="player-name">${this.creator.slice(0, 4)}...${this.creator.slice(-4)}</span>
+                            <span class="player-name">${creatorDisplay}</span>
                             <span class="player-symbol">X</span>
                             <span class="player-score">${this.wins}</span>
                         </div>
@@ -572,38 +587,19 @@ class TicTacToe {
             </div>
         `;
         
+        // Update game status
+        if (!this.gameStarted) {
+            this.updateStatus('Waiting for challenger to join...');
+        } else {
+            this.updateTurnStatus();
+        }
+        
         // Add cancel button event listener if showing
         if (showCancelButton) {
             const cancelBtn = this.container.querySelector('#cancel-game');
             if (cancelBtn) {
                 cancelBtn.addEventListener('click', async () => {
-                    // Disable the button to prevent multiple clicks
-                    cancelBtn.disabled = true;
-                    cancelBtn.textContent = 'Processing Cancellation...';
-                    cancelBtn.classList.add('processing');
-                    
-                    try {
-                        // Wait for the refund to complete
-                        await this.cancelGameAndRefund();
-                        
-                        // Update button text to show success
-                        cancelBtn.textContent = 'Game Cancelled Successfully';
-                        cancelBtn.classList.remove('processing');
-                        cancelBtn.classList.add('success');
-                        
-                        // Redirect to home after a delay to show the success message
-                        setTimeout(() => this.redirectToHome(), 5000);
-                    } catch (error) {
-                        console.error('Error during game cancellation:', error);
-                        
-                        // Update button to show error
-                        cancelBtn.textContent = 'Cancellation Failed';
-                        cancelBtn.classList.remove('processing');
-                        cancelBtn.classList.add('error');
-                        
-                        // Still redirect even if there was an error
-                        setTimeout(() => this.redirectToHome(), 4000);
-                    }
+                    await this.handleCancelGame(cancelBtn);
                 });
             }
         }
@@ -1533,6 +1529,36 @@ class TicTacToe {
         setTimeout(() => {
             notification.remove();
         }, 3000);
+    }
+
+    async handleCancelGame(cancelBtn) {
+        // Disable the button to prevent multiple clicks
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Processing Cancellation...';
+        cancelBtn.classList.add('processing');
+        
+        try {
+            // Wait for the refund to complete
+            await this.cancelGameAndRefund();
+            
+            // Update button text to show success
+            cancelBtn.textContent = 'Game Cancelled Successfully';
+            cancelBtn.classList.remove('processing');
+            cancelBtn.classList.add('success');
+            
+            // Redirect to home after a delay to show the success message
+            setTimeout(() => this.redirectToHome(), 5000);
+        } catch (error) {
+            console.error('Error during game cancellation:', error);
+            
+            // Update button to show error
+            cancelBtn.textContent = 'Cancellation Failed';
+            cancelBtn.classList.remove('processing');
+            cancelBtn.classList.add('error');
+            
+            // Still redirect even if there was an error
+            setTimeout(() => this.redirectToHome(), 4000);
+        }
     }
 }
 
