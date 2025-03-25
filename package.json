@@ -1,0 +1,11 @@
+{
+    "name": "solana-arcade",
+    "version": "1.0.0",
+    "description": "A decentralized gaming platform built on Solana",
+    "scripts": {
+        "start": "npx http-server . -p 8080 --cors"
+    },
+    "dependencies": {
+        "http-server": "^14.1.1"
+    }
+} 

@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Play PvP mini-games and wager Solana cryptocurrency. Join rooms or create your own games with custom wager amounts.">
+    <meta name="keywords" content="Solana, cryptocurrency, gaming, PvP, blockchain games, crypto gaming, web3">
+    <title>Solana Arcade - PvP Gaming Platform</title>
+    <meta property="og:title" content="Solana Arcade - PvP Gaming Platform">
+    <meta property="og:description" content="Play PvP mini-games and wager Solana cryptocurrency. Create or join game rooms with custom wager amounts.">
+    <meta property="og:type" content="website">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Chakra+Petch:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <header>
+            <div class="logo">
+                <h1>Solana Arcade</h1>
+            </div>
+            <div class="wallet-info">
+                <div class="network-badge">Devnet</div>
+                <button id="connect-wallet" class="neon-button">Connect Wallet</button>
+                <div id="wallet-connected" class="hidden">
+                    <div class="wallet-details">
+                        <span id="sol-balance">0 SOL</span>
+                        <span id="wallet-address"></span>
+                        <div class="airdrop-section">
+                            <div class="airdrop-container">
+                                <button id="request-sol" class="neon-button-secondary">Get Test SOL</button>
+                                <div id="airdrop-error" class="airdrop-error"></div>
+                            </div>
+                            <div class="airdrop-help">
+                                <span class="help-icon">?</span>
+            <div class="help-content">
+                <button class="close-help" aria-label="Close">&times;</button>
+                <h3>How to Get Test SOL</h3>
+                                <div class="help-section">
+                                    <h4>Method 1: Automatic (Easiest)</h4>
+                                    <ol>
+                                        <li>Click the "Get Test SOL" button</li>
+                                        <li>Wait for confirmation (up to 30 seconds)</li>
+                                        <li>Repeat if needed (limit: once per minute)</li>
+                                    </ol>
+                                </div>
+                                <div class="help-section">
+                                    <h4>Method 2: External Faucets</h4>
+                                    <ol>
+                                        <li>Visit any of these faucets:
+                                            <ul>
+                                                <li><a href="https://solfaucet.com" target="_blank" class="neon-link">Solana Faucet</a></li>
+                                                <li><a href="https://faucet.solana.com/" target="_blank" class="neon-link">Official Faucet</a></li>
+                                            </ul>
+                                        </li>
+                                        <li>Enter your wallet address</li>
+                                        <li>Complete captcha if required</li>
+                                        <li>Click request/airdrop</li>
+                                    </ol>
+                                </div>
+                                <div class="help-section">
+                                    <h4>Method 3: Community</h4>
+                                    <ol>
+                                        <li>Join <a href="https://discord.gg/solana" target="_blank" class="neon-link">Solana Discord</a></li>
+                                        <li>Go to #devnet-faucet channel</li>
+                                        <li>Type !faucet your_wallet_address</li>
+                                    </ol>
+                                </div>
+                                <div class="help-note">
+                                    Note: These are test tokens on Devnet. They have no real value and are for testing only.
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="devnet-info">
+                        <span class="network-note">Using Devnet SOL for testing. No real funds are used.</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Game Cards -->
+            <section class="game-section">
+                <h2>SELECT GAME</h2>
+                <div class="game-grid">
+                    <div class="game-card" data-game="tictactoe">
+                        <h3>TIC-TAC-TOE</h3>
+                        <p>Classic 3x3 grid battle</p>
+                        <button class="create-btn neon-button">Create</button>
+                    </div>
+                    <div class="game-card" data-game="rps">
+                        <h3>ROCK PAPER SCISSORS</h3>
+                        <p>Best of 5 rounds</p>
+                        <button class="create-btn neon-button">Create</button>
+                    </div>
+                    <div class="game-card" data-game="connect4">
+                        <h3>CONNECT FOUR</h3>
+                        <p>Line up 4 to win</p>
+                        <button class="create-btn neon-button">Create</button>
+                    </div>
+                    <div class="game-card" data-game="memory">
+                        <h3>MEMORY MATCH</h3>
+                        <p>Test your memory</p>
+                        <button class="create-btn neon-button">Create</button>
+                    </div>
+                    <div class="game-card" data-game="wordrace">
+                        <h3>WORD RACE</h3>
+                        <p>Speed vocabulary battle</p>
+                        <button class="create-btn neon-button">Create</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Leaderboard Section -->
+            <section id="leaderboard" class="leaderboard">
+                <h2>Top Players</h2>
+                <div class="leaderboard-tabs">
+                    <button class="tab-button active" data-tab="weekly">Weekly</button>
+                    <button class="tab-button" data-tab="alltime">All Time</button>
+                </div>
+                <div class="leaderboard-content">
+                    <div class="tab-content active" id="weekly-leaderboard">
+                        <div class="leaderboard-header">
+                            <span class="rank">Rank</span>
+                            <span class="player">Player</span>
+                            <span class="wins">Wins</span>
+                            <span class="wagered">Wagered</span>
+                        </div>
+                        <div class="leaderboard-list">
+                            <!-- Leaderboard items will be added here dynamically -->
+                        </div>
+                    </div>
+                    <div class="tab-content" id="alltime-leaderboard">
+                        <div class="leaderboard-header">
+                            <span class="rank">Rank</span>
+                            <span class="player">Player</span>
+                            <span class="wins">Wins</span>
+                            <span class="wagered">Wagered</span>
+                        </div>
+                        <div class="leaderboard-list">
+                            <!-- Leaderboard items will be added here dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Active Rooms Section -->
+            <section class="rooms-section">
+                <h2>ACTIVE ROOMS</h2>
+                <div class="rooms-filters">
+                    <select id="game-filter" class="neon-select">
+                        <option value="all">All Games</option>
+                        <option value="tictactoe">Tic-Tac-Toe</option>
+                        <option value="rps">Rock Paper Scissors</option>
+                        <option value="connect4">Connect Four</option>
+                        <option value="memory">Memory Match</option>
+                        <option value="wordrace">Word Race</option>
+                    </select>
+                    <input type="number" id="wager-filter" class="neon-input" placeholder="Min. Wager (SOL)" min="0" step="0.1">
+                </div>
+                <div class="rooms-list">
+                    <!-- Active rooms will be populated here -->
+                </div>
+            </section>
+
+            <!-- Create Room Modal -->
+            <div id="create-room-modal" class="modal hidden">
+                <div class="modal-content">
+                    <h2>CREATE GAME ROOM</h2>
+                    <form id="create-room-form">
+                        <input type="hidden" id="game-type" name="game-type">
+                        
+                        <div class="form-group">
+                            <label>Wager Amount (SOL)</label>
+                            <input type="number" id="wager-amount" name="wager-amount" step="0.1" min="0" required class="neon-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Turn Timer</label>
+                            <div class="preset-buttons">
+                                <button type="button" class="preset-btn active" data-value="10" data-target="turn-timer">10s</button>
+                                <button type="button" class="preset-btn" data-value="15" data-target="turn-timer">15s</button>
+                                <button type="button" class="preset-btn" data-value="20" data-target="turn-timer">20s</button>
+                                <button type="button" class="preset-btn custom-btn" data-target="turn-timer">Custom</button>
+                            </div>
+                            <input type="number" id="turn-timer" name="turn-timer" value="10" min="10" max="120" class="neon-input custom-input hidden" placeholder="10-120 seconds">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Number of Rounds</label>
+                            <div class="preset-buttons">
+                                <button type="button" class="preset-btn active" data-value="1" data-target="total-rounds">1</button>
+                                <button type="button" class="preset-btn" data-value="3" data-target="total-rounds">3</button>
+                                <button type="button" class="preset-btn" data-value="5" data-target="total-rounds">5</button>
+                                <button type="button" class="preset-btn custom-btn" data-target="total-rounds">Custom</button>
+                            </div>
+                            <input type="number" id="total-rounds" name="total-rounds" value="1" min="1" max="10" class="neon-input custom-input hidden" placeholder="1-10 rounds">
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="neon-button">CREATE</button>
+                            <button type="button" id="cancel-create" class="neon-button-secondary">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+
+                <style>
+                    .preset-buttons {
+                        display: grid;
+                        grid-template-columns: repeat(4, 1fr);
+                        gap: 0.5rem;
+                        margin-bottom: 0.5rem;
+                    }
+
+                    .preset-btn {
+                        padding: 0.5rem;
+                        background: transparent;
+                        border: 1px solid var(--primary);
+                        color: var(--text);
+                        border-radius: 4px;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                    }
+
+                    .preset-btn:hover {
+                        background: rgba(153, 69, 255, 0.1);
+                    }
+
+                    .preset-btn.active {
+                        background: var(--primary);
+                        color: var(--background);
+                    }
+
+                    .custom-btn {
+                        border-style: dashed;
+                    }
+
+                    .custom-input {
+                        margin-top: 0.5rem;
+                        width: 100%;
+                    }
+
+                    .hidden {
+                        display: none;
+                    }
+                </style>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Help Modal Overlay -->
+    <div class="help-overlay"></div>
+
+    <!-- Firebase Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
+    
+    <!-- Firebase Initialization -->
+    <script>
+        // Initialize Firebase first
+        const firebaseConfig = {
+            apiKey: "AIzaSyD1Q4ZqX02TZsAxwqwLW0v1a62Q8UaBs9A",
+            authDomain: "solana-arcade.firebaseapp.com",
+            projectId: "solana-arcade",
+            storageBucket: "solana-arcade.firebasestorage.app",
+            messagingSenderId: "53060669508",
+            appId: "1:53060669508:web:501735d961ae516091ec11",
+            measurementId: "G-HN3SBZSJY3",
+            databaseURL: "https://solana-arcade-default-rtdb.firebaseio.com"
+        };
+
+        // Initialize Firebase immediately
+        firebase.initializeApp(firebaseConfig);
+    </script>
+
+    <!-- Buffer Polyfill for Browser -->
+    <script>
+        // Buffer polyfill for web browsers
+        if (typeof Buffer === 'undefined') {
+            window.Buffer = {
+                from: function(data, encoding) {
+                    if (encoding === 'utf-8' || encoding === 'utf8') {
+                        return new TextEncoder().encode(data);
+                    }
+                    if (encoding === 'hex') {
+                        const result = new Uint8Array(data.length / 2);
+                        for (let i = 0; i < data.length; i += 2) {
+                            result[i / 2] = parseInt(data.substr(i, 2), 16);
+                        }
+                        return result;
+                    }
+                    throw new Error('Unsupported encoding: ' + encoding);
+                }
+            };
+        }
+    </script>
+
+    <!-- Game Scripts -->
+    <script src="js/games/tictactoe.js"></script>
+    
+    <!-- Payment Handler Script -->
+    <script src="js/solana-payment.js"></script>
+    
+    <!-- Main App Script -->
+    <script>
+        // Wait for Firebase to be ready
+        window.addEventListener('load', async () => {
+            // Import app.js only after Firebase is ready
+            const script = document.createElement('script');
+            script.src = 'js/app.js';
+            document.body.appendChild(script);
+        });
+    </script>
+
+    <style>
+        .game-section {
+            margin-bottom: 3rem;
+        }
+
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .game-card {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 180px;
+        }
+
+        .game-card .create-btn {
+            margin-top: auto;
+            width: 100%;
+            align-self: center;
+        }
+
+        .rooms-section {
+            margin-bottom: 3rem;
+        }
+
+        .rooms-filters {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .rooms-filters select,
+        .rooms-filters input {
+            flex: 1;
+        }
+
+        @media (max-width: 768px) {
+            .game-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+
+            .rooms-filters {
+                flex-direction: column;
+            }
+        }
+    </style>
+</body>
+</html>

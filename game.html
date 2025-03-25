@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solana Arcade - Game Room</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Chakra+Petch:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>Solana Arcade</h1>
+            </div>
+            <div class="wallet-info">
+                <div class="network-badge">Devnet</div>
+                <button id="connect-wallet" class="neon-button">Connect Wallet</button>
+                <div id="wallet-connected" class="hidden">
+                    <div class="wallet-details">
+                        <span id="sol-balance">0 SOL</span>
+                        <span id="wallet-address"></span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div id="game-container"></div>
+        </main>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
+    
+    <!-- Firebase Initialization -->
+    <script>
+        // Initialize Firebase first
+        const firebaseConfig = {
+            apiKey: "AIzaSyD1Q4ZqX02TZsAxwqwLW0v1a62Q8UaBs9A",
+            authDomain: "solana-arcade.firebaseapp.com",
+            projectId: "solana-arcade",
+            storageBucket: "solana-arcade.firebasestorage.app",
+            messagingSenderId: "53060669508",
+            appId: "1:53060669508:web:501735d961ae516091ec11",
+            measurementId: "G-HN3SBZSJY3",
+            databaseURL: "https://solana-arcade-default-rtdb.firebaseio.com"
+        };
+
+        // Initialize Firebase immediately
+        firebase.initializeApp(firebaseConfig);
+    </script>
+
+    <!-- Buffer Polyfill for Browser -->
+    <script>
+        // Buffer polyfill for web browsers
+        if (typeof Buffer === 'undefined') {
+            window.Buffer = {
+                from: function(data, encoding) {
+                    if (encoding === 'utf-8' || encoding === 'utf8') {
+                        return new TextEncoder().encode(data);
+                    }
+                    if (encoding === 'hex') {
+                        const result = new Uint8Array(data.length / 2);
+                        for (let i = 0; i < data.length; i += 2) {
+                            result[i / 2] = parseInt(data.substr(i, 2), 16);
+                        }
+                        return result;
+                    }
+                    throw new Error('Unsupported encoding: ' + encoding);
+                }
+            };
+        }
+    </script>
+
+    <!-- Game Scripts -->
+    <script src="js/games/tictactoe.js"></script>
+    
+    <!-- Payment Handler Script -->
+    <script src="js/solana-payment.js"></script>
+    
+    <!-- Main App Script -->
+    <script>
+        // Function to handle game initialization
+        function handleGameInit() {
+            try {
+                if (typeof initializeGameRoom === 'function') {
+                    initializeGameRoom();
+                } else {
+                    throw new Error('Game initialization function not loaded');
+                }
+            } catch (err) {
+                console.error('Game initialization error:', err);
+                const gameContainer = document.getElementById('game-container');
+                if (gameContainer) {
+                    gameContainer.innerHTML = `
+                        <div class="error-message">
+                            <h2>Failed to initialize game</h2>
+                            <p>Please try again or return to home.</p>
+                            <div class="game-controls">
+                                <button class="neon-button" onclick="window.location.reload()">Try Again</button>
+                                <button class="neon-button-secondary" onclick="window.location.href='index.html'">Back to Home</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Wait for everything to be ready
+        window.addEventListener('load', async () => {
+            // Import app.js
+            const script = document.createElement('script');
+            script.src = 'js/app.js';
+            script.onload = () => {
+                // Only initialize game room after app.js is loaded
+                handleGameInit();
+            };
+            document.body.appendChild(script);
+        });
+    </script>
+
+    <style>
+        .error-message {
+            text-align: center;
+            padding: 2rem;
+            max-width: 600px;
+            margin: 2rem auto;
+            background: rgba(255, 69, 69, 0.1);
+            border: 1px solid #ff4545;
+            border-radius: 8px;
+        }
+
+        .error-message h2 {
+            color: #ff4545;
+            margin-bottom: 1rem;
+        }
+
+        .error-message p {
+            color: var(--text);
+            margin-bottom: 2rem;
+        }
+
+        .game-controls {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+    </style>
+</body>
+</html>
