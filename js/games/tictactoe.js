@@ -887,6 +887,9 @@ class TicTacToe {
                         </button>
                     </div>
                 ` : `
+                    <div class="wager-result">
+                        <p>Total Wager Lost: ${this.wagerAmount} SOL</p>
+                    </div>
                     <div class="modal-actions">
                         <button class="modal-btn btn-primary" id="return-home">
                             Return to Home
@@ -1199,34 +1202,39 @@ class TicTacToe {
         this.endGame(result);
     }
 
-    resetGame() {
+    async resetGame() {
+        console.log('Resetting game for next round');
+        
+        // Reset local game state
         this.board = ['', '', '', '', '', '', '', '', ''];
         this.currentRound++;
         this.currentPlayer = this.creator; // Creator always starts new rounds
         this.gameStarted = true;
+        this.isGameActive = true;
         this.gameOver = false;
         this.winner = null;
         this.isDraw = false;
+        this.moves = [];
         
         console.log('Game reset for next round:', {
             currentRound: this.currentRound,
-            currentPlayer: this.currentPlayer
+            currentPlayer: this.currentPlayer,
+            isGameActive: this.isGameActive
         });
         
+        // Save the reset state to Firebase first
+        await this.saveGameState();
+        
+        // Then update the UI
         this.createGameHTML();
         this.setupEventListeners();
         this.updateTurnStatus();
+        this.updatePlayerStyles();
         
         // Start timer if it's current player's turn
-        if (this.currentPlayer === this.creator) {
+        if (this.currentPlayer === WalletState.publicKey) {
             this.startTimer();
         }
-        
-        // Reset moves for new round
-        this.moves = [];
-        
-        // Save initial state for new round
-        this.saveGameState();
     }
 
     setStatus(message) {
@@ -1237,32 +1245,35 @@ class TicTacToe {
     syncGameState(gameState) {
         if (!gameState) return;
         
-        console.log('Syncing full game state:', gameState);
+        console.log('Syncing game state:', gameState);
+        
+        // Update game status flags
+        this.gameStarted = gameState.gameStarted || false;
+        this.isGameActive = gameState.isGameActive !== undefined ? gameState.isGameActive : true;
+        this.gameOver = gameState.gameOver || false;
+        this.winner = gameState.winner || null;
+        this.isDraw = gameState.isDraw || false;
+        this.currentRound = gameState.currentRound || 1;
         
         // Update board and scores
         this.board = gameState.board || ['', '', '', '', '', '', '', '', ''];
         this.wins = gameState.wins || 0;
         this.losses = gameState.losses || 0;
         this.draws = gameState.draws || 0;
+        
+        // Update current player
+        const previousPlayer = this.currentPlayer;
         this.currentPlayer = gameState.playerTurn || this.creator;
         
-        // Update game end properties
-        this.gameOver = gameState.gameOver || false;
-        this.winner = gameState.winner || null;
-        this.isDraw = gameState.isDraw || false;
+        console.log('Player turn update:', {
+            previousPlayer,
+            currentPlayer: this.currentPlayer,
+            localWallet: WalletState.publicKey
+        });
         
-        // Update rematch votes if available
-        if (gameState.rematchVotes) {
-            this.rematchVotes = gameState.rematchVotes;
-            
-            // If game is over and modal is visible, update UI
-            if (this.gameOver && document.getElementById('game-end-modal')) {
-                this.updateRematchVoteUI();
-                this.checkRematchVotes();
-            } else if (this.gameOver && !document.getElementById('game-end-modal')) {
-                // If game is over but modal not shown, show it
-                this.showGameEndModal();
-            }
+        // Sync moves if available
+        if (gameState.moves && Array.isArray(gameState.moves)) {
+            this.moves = [...gameState.moves];
         }
         
         // Update payment status
@@ -1270,140 +1281,65 @@ class TicTacToe {
             this.paymentStatus = gameState.paymentStatus;
         }
         
-        // Sync moves if available
-        if (gameState.moves && Array.isArray(gameState.moves)) {
-            // Only sync if we have fewer moves locally
-            if (gameState.moves.length > this.moves.length) {
-                this.syncMoves(gameState.moves);
-            }
+        // Update rematch votes if available
+        if (gameState.rematchVotes) {
+            this.rematchVotes = {...gameState.rematchVotes};
         }
         
         // Update the UI
         this.createGameHTML();
         this.setupEventListeners();
         this.updateTurnStatus();
+        this.updatePlayerStyles();
         
-        // Start timer if it's our turn and game is not over
-        if (!this.gameOver && this.currentPlayer === this.creator) {
-            this.startTimer();
-        }
-    }
-    
-    // Sync moves from Firebase
-    syncMoves(moves) {
-        console.log('Syncing moves:', moves);
-        if (!moves || !Array.isArray(moves)) {
-            console.log('No valid moves to sync');
-            return;
-        }
-        
-        // Only process if there are new moves
-        if (moves.length <= this.moves.length) {
-            console.log('No new moves to process');
-            return;
-        }
-        
-        // Get the new moves
-        const newMoves = moves.slice(this.moves.length);
-        console.log('New moves to process:', newMoves);
-        
-        // Stop any existing timer before processing moves
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-        }
-        
-        // Process each new move
-        for (const move of newMoves) {
-            if (move.type === 'result') {
-                // Handle game result
-                console.log('Processing result move:', move);
-                // Don't call handleGameEnd here to avoid duplicate endGame calls
-                // Just update the result
-                if (move.result === 'draw') {
-                    this.updateStatus('Round ended in a draw!');
-                } else {
-                    const isCurrentPlayerWinner = move.result === this.currentPlayer;
-                    this.updateStatus(isCurrentPlayerWinner ? 
-                        'You won this round!' : 
-                        `${move.result.slice(0, 4)}...${move.result.slice(-4)} won this round!`);
-                }
-            } else if (move.type === 'timeout') {
-                // Handle timeout
-                console.log('Processing timeout move:', move);
-                this.currentPlayer = this.currentPlayer === this.creator ? this.challenger : this.creator;
-                this.updatePlayerStyles();
-                this.updateTurnStatus();
-                
-                if (this.currentPlayer === this.creator) {
-                    this.startTimer();
-                }
-            } else if (move.type === 'rematch-vote') {
-                // Handle rematch vote
-                console.log('Processing rematch vote:', move);
-                this.rematchVotes[move.player] = move.vote;
-                this.updateRematchVoteUI();
-                this.checkRematchVotes();
-            } else if (move.index !== undefined) {
-                // Handle board move
-                console.log('Processing board move:', move);
-                
-                const symbol = move.player === this.creator ? 'X' : 'O';
-                this.board[move.index] = symbol;
-                
-                // Update the display after applying the move
-                this.createGameHTML();
-                this.setupEventListeners();
-                
-                // Check for winner or draw after applying the move
-                const winner = this.checkWinner();
-                if (winner) {
-                    // Don't call handleGameEnd to avoid duplicate processing
-                    continue;
-                }
-                
-                if (this.checkDraw()) {
-                    // Don't call handleGameEnd to avoid duplicate processing
-                    continue;
-                }
-                
-                // Switch turns
-                this.currentPlayer = this.currentPlayer === this.creator ? this.challenger : this.creator;
-                
-                // Update display
-                this.updateTurnStatus();
-                this.updatePlayerStyles();
-                
-                // Start timer if it's now current player's turn and game not over
-                if (this.currentPlayer === this.creator && !this.gameOver) {
-                    this.startTimer();
-                }
+        // Handle timer based on current game state
+        if (!this.gameOver && this.currentPlayer === WalletState.publicKey) {
+            // Only start timer if it's our turn and the turn just changed
+            if (previousPlayer !== this.currentPlayer) {
+                console.log('Starting timer for current player');
+                this.startTimer();
+            }
+        } else {
+            // Clear timer if it's not our turn or game is over
+            if (this.timer) {
+                console.log('Clearing timer - not our turn or game over');
+                clearInterval(this.timer);
+                this.timer = null;
             }
         }
         
-        // Update our moves array to match Firebase
-        this.moves = moves;
+        // Show game end modal if game is over
+        if (this.gameOver && !document.querySelector('.game-end-modal')) {
+            console.log('Showing game end modal');
+            if (this.winner === WalletState.publicKey) {
+                this.showGameEndModal('winner');
+            } else if (this.winner) {
+                this.showGameEndModal('loser');
+            }
+        }
     }
     
     // Save game state to Firebase
     async saveGameState() {
         try {
-            // Get room ID from URL
             const urlParams = new URLSearchParams(window.location.search);
-            const roomId = urlParams.get('room');
+            const roomId = urlParams.get('roomId');
             
             if (!roomId) {
-                console.error('No room ID found');
+                console.error('No room ID found in URL');
                 return;
             }
             
             console.log('Saving game state:', {
                 currentPlayer: this.currentPlayer,
                 board: this.board,
-                moves: this.moves
+                moves: this.moves,
+                gameStarted: this.gameStarted,
+                isGameActive: this.isGameActive,
+                gameOver: this.gameOver,
+                currentRound: this.currentRound
             });
             
-            // Save game state to Firebase
             const gameState = {
                 board: this.board,
                 playerTurn: this.currentPlayer,
@@ -1423,11 +1359,13 @@ class TicTacToe {
                 paymentStatus: this.paymentStatus
             };
             
-            const roomsRef = await firebaseManager.getRoomsRef();
-            await roomsRef.child(roomId).child('gameState').set(gameState);
-            console.log('Game state saved to Firebase');
+            const roomRef = firebase.database().ref(`rooms/${roomId}`);
+            await roomRef.child('gameState').update(gameState);
+            console.log('Game state saved successfully');
+            
         } catch (error) {
             console.error('Error saving game state:', error);
+            this.showNotification('Error saving game state', 'error');
         }
     }
 
