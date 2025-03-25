@@ -704,26 +704,60 @@ class TicTacToe {
     }
 
     handleCellClick(index) {
+        console.log('Cell clicked:', {
+            index,
+            currentPlayer: this.currentPlayer,
+            walletAddress: WalletState.publicKey,
+            gameStarted: this.gameStarted,
+            isGameActive: this.isGameActive,
+            board: this.board[index]
+        });
+
         // Check if it's a valid move
         if (this.board[index] !== '' || !this.gameStarted || !this.isGameActive) {
+            console.log('Invalid move:', {
+                cellEmpty: this.board[index] === '',
+                gameStarted: this.gameStarted,
+                isGameActive: this.isGameActive
+            });
             return;
         }
 
         // Check if it's the player's turn
         const currentWalletAddress = WalletState.publicKey;
-        if (currentWalletAddress !== this.currentPlayer) {
+        const isCreator = currentWalletAddress === this.creator;
+        const isChallenger = currentWalletAddress === this.challenger;
+        const isCurrentTurn = currentWalletAddress === this.currentPlayer;
+
+        console.log('Turn validation:', {
+            isCreator,
+            isChallenger,
+            isCurrentTurn,
+            currentPlayer: this.currentPlayer,
+            walletAddress: currentWalletAddress
+        });
+
+        if (!isCurrentTurn) {
             this.showNotification("It's not your turn!", 'error');
             return;
         }
 
         // Make the move
-        this.board[index] = this.currentPlayer === this.creator ? 'X' : 'O';
-        document.querySelectorAll('.cell')[index].textContent = this.board[index];
+        const symbol = isCreator ? 'X' : 'O';
+        this.board[index] = symbol;
+        
+        // Update UI
+        const cells = document.querySelectorAll('.cell');
+        if (cells[index]) {
+            cells[index].textContent = symbol;
+            cells[index].classList.add(symbol.toLowerCase());
+        }
 
         // Save the move
         this.moves.push({
-            player: this.currentPlayer,
+            player: currentWalletAddress,
             position: index,
+            symbol: symbol,
             timestamp: Date.now()
         });
 
@@ -731,24 +765,40 @@ class TicTacToe {
         const winner = this.checkWinner();
         if (winner) {
             this.gameOver = true;
-            this.endGame(winner);
+            this.winner = currentWalletAddress;
+            this.endGame(currentWalletAddress);
             return;
         }
 
         if (this.checkDraw()) {
             this.gameOver = true;
+            this.isDraw = true;
             this.endGame('draw');
             return;
         }
 
         // Switch turns
-        this.currentPlayer = this.currentPlayer === this.creator ? this.challenger : this.creator;
+        this.currentPlayer = isCreator ? this.challenger : this.creator;
+        
+        console.log('Switching turn to:', this.currentPlayer);
+        
+        // Update UI
         this.updateTurnStatus();
         this.updatePlayerStyles();
-        this.startTimer(); // Reset the timer for the next player
-
-        // Save game state
+        
+        // Clear existing timer
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+        
+        // Save game state before starting new timer
         this.saveGameState();
+        
+        // Start timer for next player
+        if (this.currentPlayer === currentWalletAddress) {
+            this.startTimer();
+        }
     }
 
     updatePlayerStyles() {
@@ -1247,6 +1297,10 @@ class TicTacToe {
         
         console.log('Syncing game state:', gameState);
         
+        // Store current state before update
+        const previousPlayer = this.currentPlayer;
+        const wasGameActive = this.isGameActive;
+        
         // Update game status flags
         this.gameStarted = gameState.gameStarted || false;
         this.isGameActive = gameState.isGameActive !== undefined ? gameState.isGameActive : true;
@@ -1262,13 +1316,15 @@ class TicTacToe {
         this.draws = gameState.draws || 0;
         
         // Update current player
-        const previousPlayer = this.currentPlayer;
-        this.currentPlayer = gameState.playerTurn || this.creator;
+        if (gameState.playerTurn) {
+            this.currentPlayer = gameState.playerTurn;
+        }
         
-        console.log('Player turn update:', {
+        console.log('Turn update:', {
             previousPlayer,
             currentPlayer: this.currentPlayer,
-            localWallet: WalletState.publicKey
+            localWallet: WalletState.publicKey,
+            isMyTurn: this.currentPlayer === WalletState.publicKey
         });
         
         // Sync moves if available
@@ -1293,18 +1349,29 @@ class TicTacToe {
         this.updatePlayerStyles();
         
         // Handle timer based on current game state
-        if (!this.gameOver && this.currentPlayer === WalletState.publicKey) {
-            // Only start timer if it's our turn and the turn just changed
-            if (previousPlayer !== this.currentPlayer) {
-                console.log('Starting timer for current player');
+        const isMyTurn = this.currentPlayer === WalletState.publicKey;
+        const turnChanged = previousPlayer !== this.currentPlayer;
+        const gameStateChanged = wasGameActive !== this.isGameActive;
+        
+        console.log('Timer conditions:', {
+            isMyTurn,
+            turnChanged,
+            gameStateChanged,
+            gameOver: this.gameOver
+        });
+        
+        // Clear existing timer
+        if (this.timer) {
+            console.log('Clearing existing timer');
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+        
+        // Start new timer if needed
+        if (!this.gameOver && isMyTurn) {
+            if (turnChanged || gameStateChanged) {
+                console.log('Starting new timer for current player');
                 this.startTimer();
-            }
-        } else {
-            // Clear timer if it's not our turn or game is over
-            if (this.timer) {
-                console.log('Clearing timer - not our turn or game over');
-                clearInterval(this.timer);
-                this.timer = null;
             }
         }
         
