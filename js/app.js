@@ -620,25 +620,57 @@ window.isWalletConnected = isWalletConnected;
 // Update the createRoom function to validate SOL balance and process payment
 async function createRoom(gameType, wagerAmount, turnTimer, totalRounds) {
     try {
-        if (!isWalletConnected()) {
+        console.log('Creating room with params:', { gameType, wagerAmount, turnTimer, totalRounds });
+
+        // Check wallet connection
+        if (!WalletState.isConnected) {
             alert('Please connect your wallet first');
             return;
         }
 
-        // Validate SOL balance for wager
+        // Validate parameters
+        if (!gameType || !wagerAmount || !turnTimer || !totalRounds) {
+            console.error('Missing required parameters:', { gameType, wagerAmount, turnTimer, totalRounds });
+            alert('Please fill in all required fields');
+            return;
+        }
+
+        // Parse values
         const wagerAmountValue = parseFloat(wagerAmount);
-        
+        const turnTimerValue = parseInt(turnTimer);
+        const totalRoundsValue = parseInt(totalRounds);
+
+        // Validate values
+        if (isNaN(wagerAmountValue) || wagerAmountValue <= 0) {
+            alert('Please enter a valid wager amount');
+            return;
+        }
+
+        if (isNaN(turnTimerValue) || turnTimerValue < 10) {
+            alert('Please enter a valid turn timer (minimum 10 seconds)');
+            return;
+        }
+
+        if (isNaN(totalRoundsValue) || totalRoundsValue < 1) {
+            alert('Please enter a valid number of rounds');
+            return;
+        }
+
         // Make sure balance is up-to-date
         await WalletState.updateBalance();
+        console.log('Current balance:', WalletState.balance);
         
         if (WalletState.balance < wagerAmountValue) {
             alert(`Insufficient SOL balance. You have ${WalletState.balance.toFixed(2)} SOL but need ${wagerAmountValue} SOL for this wager.`);
             return;
         }
 
-        console.log('Creating room with params:', { gameType, wagerAmount, turnTimer, totalRounds });
-        
+        // Initialize Firebase if not already initialized
+        console.log('Ensuring Firebase is initialized...');
+        await firebaseManager.initialize();
+
         // Create payment handler if not already created
+        console.log('Initializing payment handler...');
         if (!window.paymentHandler) {
             window.paymentHandler = new SolanaPaymentHandler();
             await window.paymentHandler.init();
@@ -648,24 +680,27 @@ async function createRoom(gameType, wagerAmount, turnTimer, totalRounds) {
         showPaymentProcessingModal(`Processing payment of ${wagerAmountValue} SOL`);
         
         // Process payment to the central wallet
+        console.log('Processing payment...');
         const paymentResult = await window.paymentHandler.sendWager(wagerAmountValue, 'new-room', gameType);
         
         if (!paymentResult.success) {
+            console.error('Payment failed:', paymentResult.error);
             hidePaymentProcessingModal();
             alert(`Payment failed: ${paymentResult.error || 'Unknown error'}`);
             return;
         }
         
         // Payment was successful, now create the room in Firebase
+        console.log('Payment successful, creating room in Firebase...');
         const roomData = {
             gameType,
             wagerAmount: wagerAmountValue,
-            turnTimer: parseInt(turnTimer),
-            totalRounds: parseInt(totalRounds),
+            turnTimer: turnTimerValue,
+            totalRounds: totalRoundsValue,
             creator: WalletState.publicKey,
             createdAt: Date.now(),
             status: 'waiting',
-            paymentTx: paymentResult.signature, // Save the transaction signature
+            paymentTx: paymentResult.signature,
             payments: {
                 [WalletState.publicKey]: {
                     amount: wagerAmountValue,
@@ -675,7 +710,7 @@ async function createRoom(gameType, wagerAmount, turnTimer, totalRounds) {
             }
         };
 
-        console.log('Room data:', roomData);
+        console.log('Creating room with data:', roomData);
         const roomId = await firebaseManager.addRoom(roomData);
         console.log('Room created with ID:', roomId);
         
@@ -693,7 +728,7 @@ async function createRoom(gameType, wagerAmount, turnTimer, totalRounds) {
     } catch (error) {
         console.error('Error creating room:', error);
         hidePaymentProcessingModal();
-        alert('Failed to create room. Please try again.');
+        alert(`Failed to create room: ${error.message}`);
     }
 }
 
@@ -812,14 +847,32 @@ window.updateRoomsList = initializeRoomsList;
 // Event listeners
 if (gameFilter) gameFilter.addEventListener('change', initializeRoomsList);
 if (wagerFilter) wagerFilter.addEventListener('input', initializeRoomsList);
-if (createRoomForm) createRoomForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const gameType = document.getElementById('game-type').value;
-    const wagerAmount = document.getElementById('wager-amount').value;
-    const turnTimer = document.getElementById('turn-timer').value;
-    const totalRounds = document.getElementById('total-rounds').value;
-    createRoom(gameType, wagerAmount, turnTimer, totalRounds);
-});
+if (createRoomForm) {
+    createRoomForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        console.log('Form submitted');
+        
+        try {
+            const gameType = document.getElementById('game-type').value;
+            const wagerAmount = document.getElementById('wager-amount').value;
+            const turnTimer = document.getElementById('turn-timer').value;
+            const totalRounds = document.getElementById('total-rounds').value;
+            
+            console.log('Form values:', { gameType, wagerAmount, turnTimer, totalRounds });
+            
+            if (!gameType || !wagerAmount || !turnTimer || !totalRounds) {
+                console.error('Missing form values');
+                alert('Please fill in all required fields');
+                return;
+            }
+            
+            await createRoom(gameType, wagerAmount, turnTimer, totalRounds);
+        } catch (error) {
+            console.error('Error in form submission:', error);
+            alert(`Error creating room: ${error.message}`);
+        }
+    });
+}
 if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', closeCreateRoomModal);
 
 // Update initializeGameRoom function to handle player synchronization
@@ -1173,14 +1226,6 @@ document.getElementById('request-sol').addEventListener('click', () => {
     requestTestSol();
 });
 cancelCreateBtn.addEventListener('click', closeCreateRoomModal);
-createRoomForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const gameType = document.getElementById('game-type').value;
-    const wagerAmount = document.getElementById('wager-amount').value;
-    const turnTimer = document.getElementById('turn-timer').value;
-    const totalRounds = document.getElementById('total-rounds').value;
-    createRoom(gameType, wagerAmount, turnTimer, totalRounds);
-});
 
 // Help modal functionality
 const helpIcon = document.querySelector('.help-icon');
