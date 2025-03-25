@@ -177,10 +177,6 @@ class SolanaPaymentHandler {
         const fee = amount * this.FEE_PERCENTAGE;
         const winnerAmount = amount - fee;
         
-        // In a production environment, this would be handled server-side
-        // where you have access to the central wallet's private key
-        // For this demo, send funds from the connected wallet
-        
         try {
             // Ensure connection is initialized
             if (!this.connection) {
@@ -193,11 +189,6 @@ class SolanaPaymentHandler {
                 } else {
                     return { success: false, error: 'Solana Web3 not initialized' };
                 }
-            }
-            
-            // Make sure wallet is connected
-            if (!WalletState.isConnected) {
-                return { success: false, error: 'Wallet not connected' };
             }
             
             // Generate a unique transaction ID
@@ -213,24 +204,22 @@ class SolanaPaymentHandler {
                 };
             }
             
-            console.log(`Creating transaction to send ${winnerAmount} SOL from ${WalletState.publicKey} to ${winnerAddress}`);
-            
-            // Convert SOL to lamports (1 SOL = 1,000,000,000 lamports)
+            // Convert SOL to lamports
             const lamports = Math.floor(winnerAmount * 1000000000);
             
-            // Create a transaction to send the winnings
+            // Create a transaction from the central wallet to the winner
             const transaction = new window.solanaWeb3.Transaction().add(
                 window.solanaWeb3.SystemProgram.transfer({
-                    fromPubkey: new window.solanaWeb3.PublicKey(WalletState.publicKey),
+                    fromPubkey: new window.solanaWeb3.PublicKey(this.centralWalletAddress),
                     toPubkey: new window.solanaWeb3.PublicKey(winnerAddress),
                     lamports: lamports
                 })
             );
             
-            // Add metadata to transaction
+            // Add metadata
             const metadataInstruction = new window.solanaWeb3.TransactionInstruction({
                 keys: [
-                    { pubkey: new window.solanaWeb3.PublicKey(WalletState.publicKey), isSigner: true, isWritable: true }
+                    { pubkey: new window.solanaWeb3.PublicKey(this.centralWalletAddress), isSigner: true, isWritable: true }
                 ],
                 programId: new window.solanaWeb3.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
                 data: new TextEncoder().encode(`solana-arcade:winnings:${transactionId}`)
@@ -238,50 +227,42 @@ class SolanaPaymentHandler {
             transaction.add(metadataInstruction);
             
             // Get recent blockhash
-            console.log('Getting recent blockhash');
             const { blockhash } = await this.connection.getRecentBlockhash();
             transaction.recentBlockhash = blockhash;
-            transaction.feePayer = new window.solanaWeb3.PublicKey(WalletState.publicKey);
-            
-            // Sign the transaction
-            console.log('Requesting user to sign transaction');
-            let signed = await window.solana.signTransaction(transaction);
+            transaction.feePayer = new window.solanaWeb3.PublicKey(this.centralWalletAddress);
             
             // Send the transaction
-            console.log('Sending raw transaction to network');
-            const signature = await this.connection.sendRawTransaction(signed.serialize());
-            
-            // Mark this transaction as processed
-            this.processedTransactions.add(transactionId);
+            const signature = await this.connection.sendTransaction(transaction, []);
             
             // Wait for confirmation
-            console.log('Waiting for transaction confirmation');
             const confirmation = await this.connection.confirmTransaction(signature);
-            console.log('Transaction confirmed:', confirmation);
             
-            console.log('Winnings sent successfully:', signature);
+            if (confirmation.value.err) {
+                throw new Error('Transaction failed to confirm');
+            }
+            
+            // Mark transaction as processed
+            this.processedTransactions.add(transactionId);
+            
+            console.log('Winnings distributed successfully:', {
+                signature,
+                amount: winnerAmount,
+                winner: winnerAddress
+            });
             
             return {
                 success: true,
                 signature,
-                winnerAmount,
-                feeAmount: fee,
+                amount: winnerAmount,
                 transactionId
             };
+            
         } catch (error) {
             console.error('Error distributing winnings:', error);
-            
-            // If the error is about a duplicate transaction, mark as success
-            if (error.message && error.message.includes('already been processed')) {
-                return { 
-                    success: true, 
-                    isDuplicate: true,
-                    winnerAmount: winnerAmount,
-                    error: error.message
-                };
-            }
-            
-            return { success: false, error: error.message };
+            return { 
+                success: false, 
+                error: error.message || 'Failed to distribute winnings'
+            };
         }
     }
 

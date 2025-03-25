@@ -760,96 +760,54 @@ class TicTacToe {
     }
 
     handleCellClick(index) {
-        console.log('Cell clicked:', {
-            index,
-            isGameStarted: this.gameStarted,
-            playerTurn: this.playerTurn,
-            currentPlayer: this.currentPlayer,
-            isMyTurn: this.isMyTurn,
-            board: this.board[index]
-        });
-        
-        // Debugging info
-        console.log('Current board state:', this.board);
-        console.log('Current game status:', {
-            creator: this.creator,
-            challenger: this.challenger,
-            currentPlayer: this.currentPlayer,
-            playerTurn: this.playerTurn,
-            isMyTurn: this.playerTurn === this.currentPlayer
-        });
-        
-        // Early validations to provide better feedback
-        if (!this.gameStarted) {
-            console.log('Game not started yet');
-            this.updateStatus('Waiting for challenger to join...');
+        // Check if it's a valid move
+        if (
+            this.board[index] !== '' || 
+            !this.gameStarted || 
+            (this.currentPlayer !== this.creator && this.currentPlayer !== this.challenger)
+        ) {
             return;
         }
-        
-        if (!this.currentPlayer) {
-            console.log('No wallet connected');
-            this.updateStatus('Connect your wallet to play');
+
+        // Check if it's the player's turn
+        const currentWalletAddress = WalletState.publicKey;
+        if (currentWalletAddress !== this.currentPlayer) {
+            this.updateStatus("It's not your turn!");
             return;
         }
-        
-        // Force-check if it should be your turn
-        const shouldBeMyTurn = this.playerTurn === this.currentPlayer;
-        if (!shouldBeMyTurn) {
-            console.log('Not your turn:', {playerTurn: this.playerTurn, currentPlayer: this.currentPlayer});
-            this.updateStatus("It's not your turn");
-            return;
-        }
-        
-        if (this.board[index] !== null) {
-            console.log('Cell already filled');
-            return;
-        }
-        
-        console.log('Making move at cell', index);
-        
-        // Stop the timer
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-        }
-        
+
         // Make the move
-        const symbol = this.playerTurn === this.creator ? 'X' : 'O';
-        this.board[index] = symbol;
-        
-        // Add move to moves array
+        this.board[index] = this.currentPlayer === this.creator ? 'X' : 'O';
+        document.querySelectorAll('.cell')[index].textContent = this.board[index];
+
+        // Save the move
         this.moves.push({
-            player: this.playerTurn,
-            index: index,
-            symbol: symbol,
+            player: this.currentPlayer,
+            position: index,
             timestamp: Date.now()
         });
-        
-        // Update the UI after the move
-        this.createGameHTML();
-        this.setupEventListeners();
-        
+
         // Check for winner or draw
         const winner = this.checkWinner();
         if (winner) {
-            this.handleGameEnd(winner);
+            this.gameOver = true;
+            this.endGame(winner);
             return;
         }
-        
+
         if (this.checkDraw()) {
-            this.handleGameEnd('draw');
+            this.gameOver = true;
+            this.endGame('draw');
             return;
         }
-        
+
         // Switch turns
-        this.playerTurn = this.playerTurn === this.creator ? this.challenger : this.creator;
-        this.isMyTurn = false; // Update our tracking variable
-        
-        // Update the display with the new player turn
+        this.currentPlayer = this.currentPlayer === this.creator ? this.challenger : this.creator;
         this.updateTurnStatus();
         this.updatePlayerStyles();
-        
-        // Save game state to Firebase
+        this.startTimer(); // Reset the timer for the next player
+
+        // Save game state
         this.saveGameState();
     }
 
@@ -893,326 +851,166 @@ class TicTacToe {
         return this.board.every(cell => cell !== null);
     }
 
-    endGame(result) {
-        this.gameStarted = false;
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-        }
+    async endGame(result) {
+        this.isGameActive = false;
+        clearInterval(this.timer);
         
-        // Update scores
-        if (result !== 'draw') {
-            this.scores[result]++;
-        }
+        const currentWalletAddress = WalletState.publicKey;
+        const isWinner = result === currentWalletAddress;
+        const isDraw = result === 'draw';
         
-        // Check if all rounds have been played
-        if (this.currentRound >= this.totalRounds) {
-            this.gameOver = true;
-            
-            // Determine overall winner
-            if (this.scores[this.creator] > this.scores[this.challenger]) {
-                this.winner = this.creator;
-            } else if (this.scores[this.challenger] > this.scores[this.creator]) {
-                this.winner = this.challenger;
-            } else {
-                this.isDraw = true;
-            }
-            
-            // Show game end modal
-            setTimeout(() => {
-                this.showGameEndModal();
-            }, 1000);
-            
-            // Save final game state with game over status
-            this.saveGameState();
+        // Update round statistics
+        if (isDraw) {
+            this.draws++;
+        } else if (isWinner) {
+            this.wins++;
         } else {
-            // For round end but not game end
-            const isRoundWinner = result === this.currentPlayer;
-            const isRoundLoser = !isRoundWinner && result !== 'draw';
+            this.losses++;
+        }
+
+        // Show appropriate notification
+        if (isDraw) {
+            this.showRoundEndNotification("It's a draw!", false);
+        } else if (isWinner) {
+            this.showRoundEndNotification("You won this round!", true);
+        } else {
+            this.showRoundEndNotification("You lost this round!", false);
+        }
+
+        // Save the game state
+        await this.saveGameState();
+
+        // Check if the game is completely over
+        if (this.wins + this.losses + this.draws >= this.totalRounds) {
+            // Determine the final winner
+            const finalWinner = this.wins > this.losses ? this.creator : this.challenger;
             
-            // Show round end notification
-            if (isRoundLoser) {
-                this.showRoundEndNotification('You lost this round!', false);
-            } else if (isRoundWinner) {
-                this.showRoundEndNotification('You won this round!', true);
-            } else {
-                this.showRoundEndNotification('This round ended in a draw.', null);
-            }
-            
-            // Setup for next round after notification
-            setTimeout(() => this.resetGame(), 3000);
+            // Show the game end modal for both players
+            setTimeout(() => {
+                if (currentWalletAddress === finalWinner) {
+                    this.showGameEndModal('winner');
+                } else {
+                    this.showGameEndModal('loser');
+                }
+            }, 2000);
+        } else {
+            // Start next round after a delay
+            setTimeout(() => {
+                this.resetGame();
+            }, 3000);
         }
     }
-    
-    // New method to show round end notification
+
     showRoundEndNotification(message, isWin) {
-        // Create a transient notification that will automatically close
         const notification = document.createElement('div');
-        notification.className = `round-notification ${isWin ? 'win' : isWin === false ? 'loss' : 'draw'}`;
+        notification.className = `game-notification ${isWin ? 'win' : 'lose'}`;
         notification.innerHTML = `
-            <div class="round-notification-content">
+            <div class="notification-content">
                 <h3>${message}</h3>
-                <p>Next round starting in 3 seconds...</p>
+                ${this.wins + this.losses + this.draws < this.totalRounds ? 
+                    '<p>Next round starting soon...</p>' : 
+                    '<p>Game Over! Calculating final results...</p>'}
             </div>
         `;
         
-        // Add notification styles if not already in the document
-        if (!document.getElementById('round-notification-styles')) {
-            const style = document.createElement('style');
-            style.id = 'round-notification-styles';
-            style.textContent = `
-                .round-notification {
-                    position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    background: rgba(0, 0, 0, 0.85);
-                    padding: 1.5rem;
-                    border-radius: 8px;
-                    z-index: 1000;
-                    text-align: center;
-                    animation: fadeInOut 3s ease forwards;
-                }
-                
-                .round-notification.win {
-                    border: 2px solid #14f195;
-                    box-shadow: 0 0 15px rgba(20, 241, 149, 0.5);
-                }
-                
-                .round-notification.loss {
-                    border: 2px solid #ff4444;
-                    box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
-                }
-                
-                .round-notification.draw {
-                    border: 2px solid #9945FF;
-                    box-shadow: 0 0 15px rgba(153, 69, 255, 0.5);
-                }
-                
-                .round-notification-content h3 {
-                    margin-top: 0;
-                    font-size: 1.5rem;
-                    margin-bottom: 0.5rem;
-                    color: ${isWin ? '#14f195' : isWin === false ? '#ff4444' : '#9945FF'};
-                }
-                
-                .round-notification-content p {
-                    margin-bottom: 0;
-                    color: #ffffff;
-                }
-                
-                @keyframes fadeInOut {
-                    0% { opacity: 0; transform: translate(-50%, -60%); }
-                    15% { opacity: 1; transform: translate(-50%, -50%); }
-                    85% { opacity: 1; transform: translate(-50%, -50%); }
-                    100% { opacity: 0; transform: translate(-50%, -40%); }
-    }
-`;
-document.head.appendChild(style);
-        }
-        
-        // Add to page and remove after animation
         document.body.appendChild(notification);
+        
+        // Remove the notification after animation
         setTimeout(() => {
             notification.remove();
         }, 3000);
     }
 
-    showGameEndModal() {
-        // Create modal element
+    showGameEndModal(role) {
         const modal = document.createElement('div');
         modal.className = 'game-end-modal';
-        modal.id = 'game-end-modal';
         
-        let modalTitle, modalSubtitle, actionButtons;
-        
-        // Determine display based on game result and current player
-        const isWinner = this.winner === this.currentPlayer;
-        const isLoser = !isWinner && !this.isDraw && (this.currentPlayer === this.creator || this.currentPlayer === this.challenger);
-        const isParticipant = this.currentPlayer === this.creator || this.currentPlayer === this.challenger;
-        
-        if (this.isDraw) {
-            modalTitle = 'Game Ended in a Draw!';
-            modalSubtitle = 'Both players performed equally well.';
-        } else if (this.winner) {
-            if (isWinner) {
-                modalTitle = 'Congratulations, You Won!';
-                modalSubtitle = 'Well played! Claim your winnings below.';
-            } else if (isParticipant) {
-                modalTitle = 'Game Over, You Lost';
-                modalSubtitle = 'Better luck next time!';
-                
-                // Auto-redirect loser to homepage after 5 seconds
-                if (isLoser) {
-                    console.log("Setting up loser redirect to home");
-                    setTimeout(() => {
-                        console.log("Redirecting loser to home page");
-                        this.leaveGame();
-                    }, 5000);
-                }
-            } else {
-                // Spectator view
-                const winnerDisplay = `${this.winner.slice(0, 4)}...${this.winner.slice(-4)}`;
-                modalTitle = `Game Over, ${winnerDisplay} Won`;
-                modalSubtitle = 'Watch for the next game.';
-            }
-        }
-        
-        // Create action buttons based on player's role
-        if (isParticipant) {
-            if (this.isDraw) {
-                actionButtons = `
-                    <div class="modal-actions">
-                        <button id="leave-game" class="modal-btn btn-secondary">Return to Home</button>
-                    </div>
-                `;
-            } else if (isWinner) {
-                actionButtons = `
-                    <div class="modal-actions">
-                        <button id="claim-winnings" class="modal-btn btn-success">Claim Winnings</button>
-                        <button id="leave-game" class="modal-btn btn-secondary">Return to Home</button>
-                    </div>
-                `;
-            } else {
-                // Loser sees countdown message
-                actionButtons = `
-                    <div class="modal-actions">
-                        <div class="redirect-message">Returning to home in 5 seconds...</div>
-                        <button id="leave-game" class="modal-btn btn-secondary">Return to Home Now</button>
-                    </div>
-                `;
-            }
-        } else {
-            // Spectator view
-            actionButtons = `
-                <div class="modal-actions">
-                    <button id="leave-game" class="modal-btn btn-secondary">Back to Home</button>
-                </div>
-            `;
-        }
-        
-        // Calculate total wager amount
+        const isWinner = role === 'winner';
         const totalWager = this.wagerAmount * 2;
-        const fee = totalWager * 0.05; // 5% fee
-        const winnings = totalWager - fee;
+        const winnings = totalWager * 0.95; // 5% platform fee
         
         modal.innerHTML = `
             <div class="modal-content">
                 <div class="modal-header">
-                    <h2 class="modal-title">${modalTitle}</h2>
-                    <p class="modal-subtitle">${modalSubtitle}</p>
+                    <h2 class="modal-title">${isWinner ? 'Congratulations!' : 'Game Over'}</h2>
+                    <p class="modal-subtitle">${isWinner ? 'You won the game!' : 'Better luck next time!'}</p>
                 </div>
                 
                 <div class="result-info">
                     <div class="result-item">
-                        <span class="result-label">Player 1</span>
-                        <span class="result-value">${this.scores[this.creator]}</span>
+                        <span class="result-label">Wins</span>
+                        <span class="result-value">${this.wins}</span>
                     </div>
                     <div class="result-item">
-                        <span class="result-label">Rounds</span>
-                        <span class="result-value">${this.totalRounds}</span>
+                        <span class="result-label">Losses</span>
+                        <span class="result-value">${this.losses}</span>
                     </div>
                     <div class="result-item">
-                        <span class="result-label">Player 2</span>
-                        <span class="result-value">${this.scores[this.challenger]}</span>
+                        <span class="result-label">Draws</span>
+                        <span class="result-value">${this.draws}</span>
                     </div>
                 </div>
                 
-                <div class="wager-result">
-                    <div>Total Wager: ${totalWager} SOL</div>
-                    <div>Platform Fee (5%): ${fee.toFixed(2)} SOL</div>
-                    ${this.winner ? `<div>Winner's Prize: ${winnings.toFixed(2)} SOL</div>` : ''}
-                    ${this.isDraw ? '<div>Refund Amount (per player): ' + this.wagerAmount + ' SOL</div>' : ''}
-                </div>
-                
-                ${isLoser ? `
-                <div class="loser-notice">
-                    <div class="countdown-timer">5</div>
-                    <p>You'll be redirected to the home page...</p>
-                </div>
-                ` : ''}
-                
-                ${actionButtons}
+                ${isWinner ? `
+                    <div class="wager-result">
+                        <p>Total Prize Pool: ${totalWager} SOL</p>
+                        <p>Your Winnings: ${winnings.toFixed(2)} SOL</p>
+                        <p>(After 5% platform fee)</p>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="modal-btn btn-success" id="claim-winnings">
+                            Claim Winnings
+                        </button>
+                        <button class="modal-btn btn-secondary" id="return-home">
+                            Return to Home
+                        </button>
+                    </div>
+                ` : `
+                    <div class="modal-actions">
+                        <button class="modal-btn btn-primary" id="return-home">
+                            Return to Home
+                        </button>
+                    </div>
+                `}
             </div>
         `;
         
-        // Add modal to page
         document.body.appendChild(modal);
         
-        // Start countdown for loser
-        if (isLoser) {
-            this.startLoserCountdown();
-        }
-        
-        // Add event listeners for buttons
-        this.setupEndGameModalListeners();
-    }
-    
-    // Add countdown timer for loser
-    startLoserCountdown() {
-        let timeLeft = 5;
-        const countdownEl = document.querySelector('.countdown-timer');
-        
-        if (!countdownEl) return;
-        
-        // Add countdown styles if not already there
-        if (!document.getElementById('countdown-styles')) {
-            const style = document.createElement('style');
-            style.id = 'countdown-styles';
-            style.textContent = `
-                .loser-notice {
-                    background: rgba(255, 68, 68, 0.1);
-                    padding: 1rem;
-                    margin: 1rem 0;
-                    border-radius: 8px;
-                    border: 1px solid #ff4444;
-                    text-align: center;
-                }
+        // Add event listeners
+        if (isWinner) {
+            const claimButton = modal.querySelector('#claim-winnings');
+            claimButton.addEventListener('click', async () => {
+                claimButton.classList.add('processing');
+                claimButton.disabled = true;
                 
-                .countdown-timer {
-                    font-size: 2.5rem;
-                    font-weight: bold;
-                    color: #ff4444;
-                    margin-bottom: 0.5rem;
+                try {
+                    const result = await this.claimWinnings();
+                    if (result.success) {
+                        claimButton.classList.remove('processing');
+                        claimButton.classList.add('success');
+                        claimButton.textContent = 'Claimed Successfully!';
+                        
+                        // Enable return home button
+                        modal.querySelector('#return-home').disabled = false;
+                    } else {
+                        throw new Error(result.error || 'Failed to claim winnings');
+                    }
+                } catch (error) {
+                    console.error('Error claiming winnings:', error);
+                    claimButton.classList.remove('processing');
+                    claimButton.classList.add('error');
+                    claimButton.textContent = 'Failed to Claim';
                 }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        const countdownInterval = setInterval(() => {
-            timeLeft--;
-            if (countdownEl) {
-                countdownEl.textContent = timeLeft;
-            }
-            
-            if (timeLeft <= 0) {
-                clearInterval(countdownInterval);
-            }
-        }, 1000);
-    }
-    
-    setupEndGameModalListeners() {
-        const modal = document.getElementById('game-end-modal');
-        if (!modal) return;
-        
-        // Leave game button
-        const leaveBtn = modal.querySelector('#leave-game');
-        if (leaveBtn) {
-            leaveBtn.addEventListener('click', () => {
-                this.leaveGame();
             });
         }
         
-        // Claim winnings button
-        const claimBtn = modal.querySelector('#claim-winnings');
-        if (claimBtn) {
-            claimBtn.addEventListener('click', () => {
-                this.claimWinnings();
-                claimBtn.disabled = true;
-                claimBtn.classList.add('btn-disabled');
-                claimBtn.textContent = 'Processing...';
-            });
-        }
+        // Add return home button listener
+        const returnHomeButton = modal.querySelector('#return-home');
+        returnHomeButton.addEventListener('click', () => {
+            this.redirectToHome();
+        });
     }
     
     leaveGame() {
