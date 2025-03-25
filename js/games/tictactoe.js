@@ -1392,7 +1392,16 @@ class TicTacToe {
             const urlParams = new URLSearchParams(window.location.search);
             const roomId = urlParams.get('room');
             
-            if (!roomId) return;
+            if (!roomId) {
+                console.error('No room ID found');
+                return;
+            }
+            
+            console.log('Saving game state:', {
+                currentPlayer: this.currentPlayer,
+                board: this.board,
+                moves: this.moves
+            });
             
             // Save game state to Firebase
             const gameState = {
@@ -1403,10 +1412,13 @@ class TicTacToe {
                 draws: this.draws,
                 moves: this.moves,
                 lastUpdated: Date.now(),
-                // Add new properties
+                gameStarted: this.gameStarted,
+                isGameActive: this.isGameActive,
                 gameOver: this.gameOver,
                 winner: this.winner,
                 isDraw: this.isDraw,
+                currentRound: this.currentRound,
+                totalRounds: this.totalRounds,
                 rematchVotes: this.rematchVotes,
                 paymentStatus: this.paymentStatus
             };
