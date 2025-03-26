@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "programs/solana-tictactoe"
+]
+resolver = "2"
+
+[workspace.package]
+rust-version = "1.75.0"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+incremental = false
+
+[profile.dev]
+overflow-checks = true

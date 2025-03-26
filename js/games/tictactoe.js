@@ -872,8 +872,8 @@ class TicTacToe {
         // Save the game state
         await this.saveGameState();
 
-        // Check if the game is completely over
-        if (this.wins + this.losses + this.draws >= this.totalRounds) {
+        // Check if we've reached the total number of rounds
+        if (this.currentRound >= this.totalRounds) {
             // Determine the final winner
             const finalWinner = this.wins > this.losses ? this.creator : this.challenger;
             
@@ -1214,9 +1214,9 @@ class TicTacToe {
                 @keyframes fadeOut {
                     from { opacity: 1; }
                     to { opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
+    }
+`;
+document.head.appendChild(style);
         }
         
         // Add to page
@@ -1459,62 +1459,68 @@ class TicTacToe {
     }
 
     async claimWinnings() {
-        if (!this.currentPlayer || this.currentPlayer !== this.winner) return;
+        if (!this.currentPlayer || this.currentPlayer !== this.winner) {
+            return { success: false, error: 'Not authorized to claim winnings' };
+        }
         
         try {
             // Display payment processing UI
             const modalContent = document.querySelector('.modal-content');
-            if (modalContent) {
-                const paymentInfo = document.createElement('div');
-                paymentInfo.className = 'payment-info';
+            if (!modalContent) {
+                return { success: false, error: 'Modal content not found' };
+            }
+
+            const paymentInfo = document.createElement('div');
+            paymentInfo.className = 'payment-info';
+            paymentInfo.innerHTML = `
+                <h3>Payment Processing</h3>
+                <p>Processing your winnings payment...</p>
+                <div class="payment-status payment-pending">Status: Processing</div>
+            `;
+            
+            const actions = modalContent.querySelector('.modal-actions');
+            if (actions) {
+                modalContent.insertBefore(paymentInfo, actions);
+            } else {
+                modalContent.appendChild(paymentInfo);
+            }
+            
+            // Get total wager amount (both players)
+            const totalWager = this.wagerAmount * 2;
+            
+            // Initialize payment handler if needed
+            if (!window.paymentHandler) {
+                window.paymentHandler = new SolanaPaymentHandler();
+                await window.paymentHandler.init();
+            }
+            
+            // Process the payment
+            const paymentResult = await window.paymentHandler.distributeWinnings(this.currentPlayer, totalWager);
+            
+            if (paymentResult && paymentResult.success) {
+                this.paymentStatus = 'complete';
                 paymentInfo.innerHTML = `
-                    <h3>Payment Processing</h3>
-                    <p>Processing your winnings payment...</p>
-                    <div class="payment-status payment-pending">Status: Processing</div>
+                    <h3>Payment Complete</h3>
+                    <p>Your winnings have been sent to your wallet.</p>
+                    <div class="payment-status payment-success">Status: Complete</div>
+                    <p>Total amount: ${paymentResult.winnerAmount.toFixed(2)} SOL</p>
+                    <p>Transaction ID: ${paymentResult.simulatedTxId || paymentResult.signature || 'N/A'}</p>
                 `;
                 
-                const actions = modalContent.querySelector('.modal-actions');
-                if (actions) {
-                    modalContent.insertBefore(paymentInfo, actions);
-                } else {
-                    modalContent.appendChild(paymentInfo);
+                // Disable claim button to prevent multiple claims
+                const claimBtn = modalContent.querySelector('#claim-winnings');
+                if (claimBtn) {
+                    claimBtn.disabled = true;
+                    claimBtn.textContent = 'Winnings Claimed';
+                    claimBtn.classList.add('btn-disabled');
                 }
                 
-                // Get total wager amount (both players)
-                const totalWager = this.wagerAmount * 2;
+                // Save payment status to Firebase
+                await this.saveGameState();
                 
-                // Initialize payment handler if needed
-                if (!window.paymentHandler) {
-                    window.paymentHandler = new SolanaPaymentHandler();
-                    await window.paymentHandler.init();
-                }
-                
-                // Actually process the payment
-                const paymentResult = await window.paymentHandler.distributeWinnings(this.currentPlayer, totalWager);
-                
-                if (paymentResult && paymentResult.success) {
-                    this.paymentStatus = 'complete';
-                    paymentInfo.innerHTML = `
-                        <h3>Payment Complete</h3>
-                        <p>Your winnings have been sent to your wallet.</p>
-                        <div class="payment-status payment-success">Status: Complete</div>
-                        <p>Total amount: ${paymentResult.winnerAmount.toFixed(2)} SOL</p>
-                        <p>Transaction ID: ${paymentResult.simulatedTxId || paymentResult.signature || 'N/A'}</p>
-                    `;
-                    
-                    // Disable claim button to prevent multiple claims
-                    const claimBtn = modalContent.querySelector('#claim-winnings');
-                    if (claimBtn) {
-                        claimBtn.disabled = true;
-                        claimBtn.textContent = 'Winnings Claimed';
-                        claimBtn.classList.add('btn-disabled');
-                    }
-                    
-                    // Save payment status to Firebase
-                    this.saveGameState();
-                } else {
-                    throw new Error(paymentResult.error || 'Failed to process payment');
-                }
+                return { success: true, ...paymentResult };
+            } else {
+                throw new Error(paymentResult.error || 'Failed to process payment');
             }
         } catch (error) {
             console.error('Error processing payment:', error);
@@ -1537,6 +1543,8 @@ class TicTacToe {
                     claimBtn.classList.remove('btn-disabled');
                 }
             }
+            
+            return { success: false, error: error.message };
         }
     }
 
