@@ -439,7 +439,7 @@ const TICTACTOE_STYLES = `
 `;
 
 class TicTacToe {
-    constructor(roomId, wagerAmount, totalRounds = 3) {
+    constructor(roomId, wagerAmount, totalRounds = 3, turnTimer = 30) {
         this.roomId = roomId;
         this.wagerAmount = wagerAmount;
         this.totalRounds = totalRounds;
@@ -456,7 +456,7 @@ class TicTacToe {
         this.currentPlayer = null;
         this.winner = null;
         this.timer = null;
-        this.timerDuration = 30; // 30 seconds per turn
+        this.timerDuration = turnTimer; // Use the provided turn timer value
         
         // Game end and rematch properties
         this.gameOver = false;
@@ -1319,6 +1319,11 @@ class TicTacToe {
         this.isDraw = gameState.isDraw || false;
         this.currentRound = gameState.currentRound || 1;
         
+        // Update timer duration if provided
+        if (gameState.timerDuration) {
+            this.timerDuration = gameState.timerDuration;
+        }
+        
         // Update board and scores
         if (Array.isArray(gameState.board)) {
             this.board = [...gameState.board];
@@ -1410,7 +1415,8 @@ class TicTacToe {
                 gameStarted: this.gameStarted,
                 isGameActive: this.isGameActive,
                 gameOver: this.gameOver,
-                currentRound: this.currentRound
+                currentRound: this.currentRound,
+                timerDuration: this.timerDuration
             });
             
             const gameState = {
@@ -1429,7 +1435,8 @@ class TicTacToe {
                 currentRound: this.currentRound,
                 totalRounds: this.totalRounds,
                 rematchVotes: this.rematchVotes,
-                paymentStatus: this.paymentStatus
+                paymentStatus: this.paymentStatus,
+                timerDuration: this.timerDuration
             };
             
             const roomRef = firebase.database().ref(`rooms/${roomId}`);

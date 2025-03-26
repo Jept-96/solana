@@ -942,14 +942,15 @@ async function initializeGameRoom() {
 }
 
 function initializeGameType(gameType, room) {
-    console.log('Initializing game type:', gameType);
+    console.log('Initializing game type:', gameType, 'with room data:', room);
     
     switch (gameType) {
         case 'tictactoe':
             return new TicTacToe(
                 room.id,
                 room.wagerAmount,
-                room.totalRounds || 3
+                room.totalRounds || 3,
+                room.turnTimer
             );
         // Add other game types here
         default:
