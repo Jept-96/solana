@@ -767,19 +767,21 @@ class TicTacToe {
             timestamp: Date.now()
         });
 
-        // Switch turns before checking winner
+        // Save game state before switching turns
+        await this.saveGameState();
+
+        // Switch turns after saving state
         this.currentPlayer = isCreator ? this.challenger : this.creator;
-        
         console.log('Switching turn to:', this.currentPlayer);
         
-        // Update UI
+        // Update UI for turn change
         this.updateTurnStatus();
         this.updatePlayerStyles();
 
-        // Save game state immediately after move
+        // Save game state again with new turn
         await this.saveGameState();
 
-        // Check for winner or draw after state is saved
+        // Check for winner or draw
         const winner = this.checkWinner();
         if (winner) {
             this.gameOver = true;
@@ -796,7 +798,7 @@ class TicTacToe {
         }
         
         // Start timer for next player if game is still active
-        if (!this.gameOver && this.currentPlayer === currentWalletAddress) {
+        if (!this.gameOver && this.isGameActive) {
             this.startTimer();
         }
     }
@@ -1332,9 +1334,15 @@ class TicTacToe {
         this.losses = gameState.losses || 0;
         this.draws = gameState.draws || 0;
         
-        // Update current player
-        if (gameState.playerTurn) {
-            this.currentPlayer = gameState.playerTurn;
+        // Update current player (check both properties for compatibility)
+        const newCurrentPlayer = gameState.currentPlayer || gameState.playerTurn;
+        if (newCurrentPlayer) {
+            console.log('Updating current player:', {
+                from: this.currentPlayer,
+                to: newCurrentPlayer,
+                source: gameState.currentPlayer ? 'currentPlayer' : 'playerTurn'
+            });
+            this.currentPlayer = newCurrentPlayer;
         }
         
         console.log('Turn update:', {
@@ -1401,7 +1409,7 @@ class TicTacToe {
     async saveGameState() {
         try {
             const urlParams = new URLSearchParams(window.location.search);
-            const roomId = urlParams.get('roomId');
+            const roomId = urlParams.get('room'); // Fixed: using 'room' instead of 'roomId'
             
             if (!roomId) {
                 console.error('No room ID found in URL');
@@ -1421,7 +1429,8 @@ class TicTacToe {
             
             const gameState = {
                 board: this.board,
-                playerTurn: this.currentPlayer,
+                currentPlayer: this.currentPlayer, // Fixed: consistent property name
+                playerTurn: this.currentPlayer, // Keep both for backward compatibility
                 wins: this.wins,
                 losses: this.losses,
                 draws: this.draws,
