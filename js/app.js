@@ -1836,42 +1836,55 @@ function hidePaymentProcessingModal() {
 function setupRealtimeUpdates(game, room) {
     console.log('Setting up real-time updates for room:', room.id);
     
-    // Get reference to the room in Firebase
-    const roomRef = firebase.database().ref(`rooms/${room.id}`);
-    
-    // Listen for room updates
-    roomRef.on('value', (snapshot) => {
-        const updatedRoom = snapshot.val();
-        if (!updatedRoom) {
-            console.log('Room no longer exists');
-            window.location.href = '/';
-            return;
-        }
+    try {
+        // Get reference to the room in Firebase
+        const roomRef = firebase.database().ref(`rooms/${room.id}`);
         
-        console.log('Room updated:', updatedRoom);
-        
-        // Handle challenger joining
-        if (updatedRoom.challenger && !room.challenger) {
-            console.log('Challenger joined:', updatedRoom.challenger);
-            room.challenger = updatedRoom.challenger;
-            game.initialize(room.creator, updatedRoom.challenger);
-        }
-        
-        // Handle game state updates
-        if (updatedRoom.gameState) {
-            console.log('Updating game state:', updatedRoom.gameState);
-            
-            // Use the game's syncGameState method to handle all state updates
-            game.syncGameState(updatedRoom.gameState);
-            
-            // Update game controls if needed
-            updateGameControls(game, updatedRoom);
-        }
-    });
-    
-    // Handle errors
-    roomRef.on('error', (error) => {
-        console.error('Error in real-time updates:', error);
-        alert('Lost connection to the game. Please refresh the page.');
-    });
+        // Listen for room updates
+        roomRef.on('value', (snapshot) => {
+            try {
+                const updatedRoom = snapshot.val();
+                if (!updatedRoom) {
+                    console.log('Room no longer exists');
+                    window.location.href = '/';
+                    return;
+                }
+                
+                console.log('Room updated:', updatedRoom);
+                
+                // Handle challenger joining
+                if (updatedRoom.challenger && !room.challenger) {
+                    console.log('Challenger joined:', updatedRoom.challenger);
+                    room.challenger = updatedRoom.challenger;
+                    game.initialize(room.creator, updatedRoom.challenger);
+                }
+                
+                // Handle game state updates
+                if (updatedRoom.gameState) {
+                    console.log('Updating game state:', updatedRoom.gameState);
+                    
+                    // Use the game's syncGameState method to handle all state updates
+                    game.syncGameState(updatedRoom.gameState);
+                    
+                    // Update game controls if needed
+                    updateGameControls(game, updatedRoom);
+                }
+            } catch (error) {
+                console.error('Error processing room update:', error);
+                alert('Error updating game state. Please refresh the page.');
+            }
+        }, (error) => {
+            console.error('Firebase subscription error:', error);
+            alert('Lost connection to the game. Please refresh the page.');
+        });
+    } catch (error) {
+        console.error('Error setting up real-time updates:', error);
+        alert('Failed to connect to the game. Please refresh the page.');
+    }
+}
+
+// Helper function to show error messages
+function showError(message) {
+    console.error(message);
+    alert(message);
 }
