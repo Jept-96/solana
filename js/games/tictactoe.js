@@ -703,7 +703,7 @@ class TicTacToe {
         }
     }
 
-    handleCellClick(index) {
+    async handleCellClick(index) {
         console.log('Cell clicked:', {
             index,
             currentPlayer: this.currentPlayer,
@@ -742,6 +742,12 @@ class TicTacToe {
             return;
         }
 
+        // Clear any existing timer first
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+
         // Make the move
         const symbol = isCreator ? 'X' : 'O';
         this.board[index] = symbol;
@@ -761,23 +767,7 @@ class TicTacToe {
             timestamp: Date.now()
         });
 
-        // Check for winner or draw
-        const winner = this.checkWinner();
-        if (winner) {
-            this.gameOver = true;
-            this.winner = currentWalletAddress;
-            this.endGame(currentWalletAddress);
-            return;
-        }
-
-        if (this.checkDraw()) {
-            this.gameOver = true;
-            this.isDraw = true;
-            this.endGame('draw');
-            return;
-        }
-
-        // Switch turns
+        // Switch turns before checking winner
         this.currentPlayer = isCreator ? this.challenger : this.creator;
         
         console.log('Switching turn to:', this.currentPlayer);
@@ -785,18 +775,28 @@ class TicTacToe {
         // Update UI
         this.updateTurnStatus();
         this.updatePlayerStyles();
-        
-        // Clear existing timer
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
+
+        // Save game state immediately after move
+        await this.saveGameState();
+
+        // Check for winner or draw after state is saved
+        const winner = this.checkWinner();
+        if (winner) {
+            this.gameOver = true;
+            this.winner = currentWalletAddress;
+            await this.endGame(currentWalletAddress);
+            return;
+        }
+
+        if (this.checkDraw()) {
+            this.gameOver = true;
+            this.isDraw = true;
+            await this.endGame('draw');
+            return;
         }
         
-        // Save game state before starting new timer
-        this.saveGameState();
-        
-        // Start timer for next player
-        if (this.currentPlayer === currentWalletAddress) {
+        // Start timer for next player if game is still active
+        if (!this.gameOver && this.currentPlayer === currentWalletAddress) {
             this.startTimer();
         }
     }
@@ -1293,7 +1293,10 @@ class TicTacToe {
     
     // Sync game state from Firebase
     syncGameState(gameState) {
-        if (!gameState) return;
+        if (!gameState) {
+            console.error('Invalid game state received');
+            return;
+        }
         
         console.log('Syncing game state:', gameState);
         
@@ -1301,16 +1304,25 @@ class TicTacToe {
         const previousPlayer = this.currentPlayer;
         const wasGameActive = this.isGameActive;
         
+        // Clear any existing timer first
+        if (this.timer) {
+            console.log('Clearing existing timer');
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+        
         // Update game status flags
-        this.gameStarted = gameState.gameStarted || false;
-        this.isGameActive = gameState.isGameActive !== undefined ? gameState.isGameActive : true;
+        this.gameStarted = gameState.gameStarted;
+        this.isGameActive = gameState.isGameActive;
         this.gameOver = gameState.gameOver || false;
         this.winner = gameState.winner || null;
         this.isDraw = gameState.isDraw || false;
         this.currentRound = gameState.currentRound || 1;
         
         // Update board and scores
-        this.board = gameState.board || ['', '', '', '', '', '', '', '', ''];
+        if (Array.isArray(gameState.board)) {
+            this.board = [...gameState.board];
+        }
         this.wins = gameState.wins || 0;
         this.losses = gameState.losses || 0;
         this.draws = gameState.draws || 0;
@@ -1357,18 +1369,12 @@ class TicTacToe {
             isMyTurn,
             turnChanged,
             gameStateChanged,
-            gameOver: this.gameOver
+            gameOver: this.gameOver,
+            isGameActive: this.isGameActive
         });
         
-        // Clear existing timer
-        if (this.timer) {
-            console.log('Clearing existing timer');
-            clearInterval(this.timer);
-            this.timer = null;
-        }
-        
-        // Start new timer if needed
-        if (!this.gameOver && isMyTurn) {
+        // Start new timer if it's our turn and game is active
+        if (isMyTurn && !this.gameOver && this.isGameActive) {
             if (turnChanged || gameStateChanged) {
                 console.log('Starting new timer for current player');
                 this.startTimer();

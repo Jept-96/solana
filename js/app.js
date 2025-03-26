@@ -1860,62 +1860,12 @@ function setupRealtimeUpdates(game, room) {
         if (updatedRoom.gameState) {
             console.log('Updating game state:', updatedRoom.gameState);
             
-            // Update game state properties
-            game.gameStarted = updatedRoom.gameState.gameStarted || game.gameStarted;
-            game.isGameActive = updatedRoom.gameState.isGameActive !== undefined ? 
-                updatedRoom.gameState.isGameActive : game.isGameActive;
-            game.gameOver = updatedRoom.gameState.gameOver || false;
-            game.winner = updatedRoom.gameState.winner || null;
-            game.isDraw = updatedRoom.gameState.isDraw || false;
+            // Use the game's syncGameState method to handle all state updates
+            game.syncGameState(updatedRoom.gameState);
             
-            // Update board state
-            if (updatedRoom.gameState.board) {
-                game.board = updatedRoom.gameState.board;
-            }
-            
-            // Update current player
-            if (updatedRoom.gameState.playerTurn) {
-                const previousPlayer = game.currentPlayer;
-                game.currentPlayer = updatedRoom.gameState.playerTurn;
-                
-                // Only start timer if it's our turn and the turn just changed
-                if (game.currentPlayer === WalletState.publicKey && 
-                    previousPlayer !== game.currentPlayer && 
-                    !game.gameOver) {
-                    game.startTimer();
-                }
-            }
-            
-            // Update scores
-            if (updatedRoom.gameState.wins !== undefined) {
-                game.wins = updatedRoom.gameState.wins;
-            }
-            if (updatedRoom.gameState.losses !== undefined) {
-                game.losses = updatedRoom.gameState.losses;
-            }
-            if (updatedRoom.gameState.draws !== undefined) {
-                game.draws = updatedRoom.gameState.draws;
-            }
-            
-            // Update moves
-            if (updatedRoom.gameState.moves) {
-                game.moves = updatedRoom.gameState.moves;
-            }
-            
-            // Update round information
-            if (updatedRoom.gameState.currentRound) {
-                game.currentRound = updatedRoom.gameState.currentRound;
-            }
-            
-            // Refresh the game display
-            game.createGameHTML();
-            game.setupEventListeners();
-            game.updateTurnStatus();
-            game.updatePlayerStyles();
+            // Update game controls if needed
+            updateGameControls(game, updatedRoom);
         }
-        
-        // Update game controls if needed
-        updateGameControls(game, updatedRoom);
     });
     
     // Handle errors
